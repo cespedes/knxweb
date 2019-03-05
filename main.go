@@ -11,8 +11,15 @@ import (
 
 const DefaultKNXPort = 3671
 
+func get_knx_messages(c <-chan knx.GroupEvent) {
+	for msg := range c {
+		log.Printf("KNX: %+v", msg)
+	}
+}
+
 func webserver(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, "this is the web server")
+	fmt.Fprintf(w, "URL: %+v\n", r.URL)
 }
 
 func main() {
@@ -23,14 +30,13 @@ func main() {
 	if !strings.Contains(*knxrouter, ":") {
 			*knxrouter = fmt.Sprintf("%s:%d", *knxrouter, DefaultKNXPort)
 	}
+
 	client, err := knx.NewGroupTunnel(*knxrouter, knx.DefaultTunnelConfig)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer client.Close()
-	for msg := range client.Inbound() {
-		log.Printf("KNX: %+v", msg)
-	}
+	go get_knx_messages(client.Inbound())
 
 	http.HandleFunc("/", webserver)
 	log.Printf("Starting web server on port %d...", *webport)
