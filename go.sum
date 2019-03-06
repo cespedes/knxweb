@@ -1,2 +1,4 @@
+github.com/gorilla/mux v1.7.0 h1:tOSd0UKHQd6urX6ApfOn4XdBMY6Sh1MfxV3kmaazO+U=
+github.com/gorilla/mux v1.7.0/go.mod h1:1lud6UwP+6orDFRuTfBEV8e9/aOM/c4fVVCaMa2zaAs=
 github.com/vapourismo/knx-go v0.0.0-20190301091749-cac641dc3cc0 h1:yA6406dqvTnH1QfbZC3exETA+O0TKuTJEbk/VFnrFUU=
 github.com/vapourismo/knx-go v0.0.0-20190301091749-cac641dc3cc0/go.mod h1:7+aWBsUJCo9OQRCgTypRmIQW9KKKcPMjtrdnYIBsS70=
