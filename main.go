@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"flag"
 	"time"
+	"sort"
 	"sync"
 	"strings"
 	"net/http"
@@ -20,15 +21,21 @@ type knx_msg struct {
 	Event knx.GroupEvent
 }
 
-var values = map[cemi.GroupAddr]knx_msg{}
-var messages []knx_msg
 var mutex sync.Mutex
+var messages []knx_msg
+var values = map[cemi.GroupAddr]knx_msg{}
+var sorted_values []cemi.GroupAddr
 
 func get_knx_messages(c <-chan knx.GroupEvent) {
 	for event := range c {
-		mutex.Lock()
 		msg := knx_msg{When: time.Now(), Event: event}
+		mutex.Lock()
 		messages = append(messages, msg)
+		if _, ok := values[event.Destination]; !ok {
+			// this destination has already been seen
+			sorted_values = append(sorted_values, event.Destination)
+			sort.Slice(sorted_values, func(i, j int) bool { return sorted_values[i] < sorted_values[j]})
+		}
 		values[event.Destination] = msg
 		mutex.Unlock()
 		log.Printf("KNX: %+v", event)
@@ -51,8 +58,8 @@ func web_get(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Last message: %+v", msg)
 	} else if path=="all" {
 		mutex.Lock()
-		for msg := range values {
-			fmt.Fprintf(w, "%+v\n", values[msg])
+		for i := range sorted_values {
+			fmt.Fprintf(w, "%+v\n", values[sorted_values[i]])
 		}
 		mutex.Unlock()
 	} else if i, _ := fmt.Sscanf(path, "%d/%d/%d", &a, &b, &c) ; i==3 {
