@@ -26,8 +26,18 @@ var messages []knx_msg
 var values = map[cemi.GroupAddr]knx_msg{}
 var sorted_values []cemi.GroupAddr
 
-func get_knx_messages(c <-chan knx.GroupEvent) {
-	for event := range c {
+func get_knx_messages(knxrouter string) {
+	if !strings.Contains(knxrouter, ":") {
+		knxrouter = fmt.Sprintf("%s:%d", knxrouter, DefaultKNXPort)
+	}
+
+	client, err := knx.NewGroupTunnel(knxrouter, knx.DefaultTunnelConfig)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer client.Close()
+
+	for event := range client.Inbound() {
 		msg := knx_msg{When: time.Now(), Event: event}
 		mutex.Lock()
 		messages = append(messages, msg)
@@ -78,16 +88,7 @@ func main() {
 	knxrouter := flag.String("knx", "", "address of KNX router")
 	flag.Parse()
 
-	if !strings.Contains(*knxrouter, ":") {
-			*knxrouter = fmt.Sprintf("%s:%d", *knxrouter, DefaultKNXPort)
-	}
-
-	client, err := knx.NewGroupTunnel(*knxrouter, knx.DefaultTunnelConfig)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer client.Close()
-	go get_knx_messages(client.Inbound())
+	go get_knx_messages(*knxrouter)
 
 	http.HandleFunc("/", web_root)
 	http.HandleFunc("/get/", web_get)
