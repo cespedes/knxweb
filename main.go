@@ -14,7 +14,10 @@ import (
 	"github.com/vapourismo/knx-go/knx/cemi"
 )
 
-const DefaultKNXPort = 3671
+const (
+	DefaultKNXPort = 3671
+	KNXTimeout = 5
+)
 
 type knx_msg struct {
 	When  time.Time
@@ -26,31 +29,54 @@ var messages []knx_msg
 var values = map[cemi.GroupAddr]knx_msg{}
 var sorted_values []cemi.GroupAddr
 
+func new_knx_message(event knx.GroupEvent) {
+	msg := knx_msg{When: time.Now(), Event: event}
+	mutex.Lock()
+	messages = append(messages, msg)
+	if _, ok := values[event.Destination]; ok {
+		// this destination has already been seen
+		sorted_values = append(sorted_values, event.Destination)
+		sort.Slice(sorted_values, func(i, j int) bool { return sorted_values[i] < sorted_values[j]})
+	}
+	values[event.Destination] = msg
+	mutex.Unlock()
+	log.Printf("KNX: %+v", event)
+	b, _ := json.Marshal(event)
+	log.Printf("JSON: %v", string(b))
+}
+
 func get_knx_messages(knxrouter string) {
 	if !strings.Contains(knxrouter, ":") {
 		knxrouter = fmt.Sprintf("%s:%d", knxrouter, DefaultKNXPort)
 	}
 
-	client, err := knx.NewGroupTunnel(knxrouter, knx.DefaultTunnelConfig)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer client.Close()
+	for {
+		log.Println("Stablishing connection to KNX router")
 
-	for event := range client.Inbound() {
-		msg := knx_msg{When: time.Now(), Event: event}
-		mutex.Lock()
-		messages = append(messages, msg)
-		if _, ok := values[event.Destination]; !ok {
-			// this destination has already been seen
-			sorted_values = append(sorted_values, event.Destination)
-			sort.Slice(sorted_values, func(i, j int) bool { return sorted_values[i] < sorted_values[j]})
+		client, err := knx.NewGroupTunnel(knxrouter, knx.DefaultTunnelConfig)
+		if err != nil {
+			log.Fatal(err)
 		}
-		values[event.Destination] = msg
-		mutex.Unlock()
-		log.Printf("KNX: %+v", event)
-		b, _ := json.Marshal(event)
-		log.Printf("JSON: %v", string(b))
+		defer client.Close()
+
+		knx_chan := client.Inbound()
+
+		InnerLoop:
+		for {
+			select {
+			case <-time.After(KNXTimeout * time.Second):
+				log.Printf("timeout (%d seconds)", KNXTimeout)
+				break InnerLoop
+			case event, ok := <-knx_chan:
+				if !ok {
+					log.Printf("not ok")
+					break InnerLoop
+				}
+				new_knx_message(event)
+			}
+		}
+		client.Close()
+		time.Sleep(time.Second)
 	}
 }
 
