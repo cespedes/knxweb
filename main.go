@@ -33,8 +33,8 @@ func new_knx_message(event knx.GroupEvent) {
 	msg := knx_msg{When: time.Now(), Event: event}
 	mutex.Lock()
 	messages = append(messages, msg)
-	if _, ok := values[event.Destination]; ok {
-		// this destination has already been seen
+	if _, ok := values[event.Destination]; !ok {
+		// this destination has not been seen yet
 		sorted_values = append(sorted_values, event.Destination)
 		sort.Slice(sorted_values, func(i, j int) bool { return sorted_values[i] < sorted_values[j]})
 	}
