@@ -35,6 +35,7 @@ func new_knx_message(event knx.GroupEvent) {
 	messages = append(messages, msg)
 	if _, ok := values[event.Destination]; !ok {
 		// this destination has not been seen yet
+		log.Printf("New destination group addr: %v", event.Destination)
 		sorted_values = append(sorted_values, event.Destination)
 		sort.Slice(sorted_values, func(i, j int) bool { return sorted_values[i] < sorted_values[j]})
 	}
