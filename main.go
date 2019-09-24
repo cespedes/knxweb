@@ -1,43 +1,44 @@
 package main
 
 import (
-	"log"
-	"fmt"
-	"flag"
-	"time"
-	"sort"
-	"sync"
-	"strings"
-	"net/http"
 	"encoding/json"
+	"flag"
+	"fmt"
+	"log"
+	"net/http"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/vapourismo/knx-go/knx"
 	"github.com/vapourismo/knx-go/knx/cemi"
 )
 
 const (
-	DefaultKNXPort = 3671
-	KNXTimeout = 5
+	KNXDefaultPort = 3671
+	KNXTimeout     = 5
 )
 
-type knx_msg struct {
+type knxMsg struct {
 	When  time.Time
 	Event knx.GroupEvent
 }
 
 var mutex sync.Mutex
-var messages []knx_msg
-var values = map[cemi.GroupAddr]knx_msg{}
-var sorted_values []cemi.GroupAddr
+var messages []knxMsg
+var values = map[cemi.GroupAddr]knxMsg{}
+var sortedValues []cemi.GroupAddr
 
-func new_knx_message(event knx.GroupEvent) {
-	msg := knx_msg{When: time.Now(), Event: event}
+func knxNewMessage(event knx.GroupEvent) {
+	msg := knxMsg{When: time.Now(), Event: event}
 	mutex.Lock()
 	messages = append(messages, msg)
 	if _, ok := values[event.Destination]; !ok {
 		// this destination has not been seen yet
 		log.Printf("New destination group addr: %v", event.Destination)
-		sorted_values = append(sorted_values, event.Destination)
-		sort.Slice(sorted_values, func(i, j int) bool { return sorted_values[i] < sorted_values[j]})
+		sortedValues = append(sortedValues, event.Destination)
+		sort.Slice(sortedValues, func(i, j int) bool { return sortedValues[i] < sortedValues[j] })
 	}
 	values[event.Destination] = msg
 	mutex.Unlock()
@@ -46,9 +47,9 @@ func new_knx_message(event knx.GroupEvent) {
 	log.Printf("JSON: %v", string(b))
 }
 
-func get_knx_messages(knxrouter string) {
+func knxGetMessages(knxrouter string) {
 	if !strings.Contains(knxrouter, ":") {
-		knxrouter = fmt.Sprintf("%s:%d", knxrouter, DefaultKNXPort)
+		knxrouter = fmt.Sprintf("%s:%d", knxrouter, KNXDefaultPort)
 	}
 
 	for {
@@ -60,20 +61,20 @@ func get_knx_messages(knxrouter string) {
 		}
 		defer client.Close()
 
-		knx_chan := client.Inbound()
+		knxChan := client.Inbound()
 
-		InnerLoop:
+	innerLoop:
 		for {
 			select {
 			case <-time.After(KNXTimeout * time.Second):
 				log.Printf("timeout (%d seconds)", KNXTimeout)
-				break InnerLoop
-			case event, ok := <-knx_chan:
+				break innerLoop
+			case event, ok := <-knxChan:
 				if !ok {
 					log.Printf("not ok")
-					break InnerLoop
+					break innerLoop
 				}
-				new_knx_message(event)
+				knxNewMessage(event)
 			}
 		}
 		client.Close()
@@ -81,32 +82,32 @@ func get_knx_messages(knxrouter string) {
 	}
 }
 
-func web_root(w http.ResponseWriter, r *http.Request) {
+func webRoot(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "ROOT: %s\n", r.URL)
 }
 
-func web_get(w http.ResponseWriter, r *http.Request) {
+func webGet(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path[5:]
 	var a, b, c uint8
-	if path=="latest" {
+	if path == "latest" {
 		mutex.Lock()
 		msg := messages[len(messages)-1]
 		mutex.Unlock()
 		fmt.Fprintf(w, "Last message: %+v", msg)
-	} else if path=="all" {
+	} else if path == "all" {
 		mutex.Lock()
-		for i := range sorted_values {
-			fmt.Fprintf(w, "%+v\n", values[sorted_values[i]])
+		for i := range sortedValues {
+			fmt.Fprintf(w, "%+v\n", values[sortedValues[i]])
 		}
 		mutex.Unlock()
-	} else if i, _ := fmt.Sscanf(path, "%d/%d/%d", &a, &b, &c) ; i==3 {
+	} else if i, _ := fmt.Sscanf(path, "%d/%d/%d", &a, &b, &c); i == 3 {
 		mutex.Lock()
-		fmt.Fprintf(w, "Last message to %d/%d/%d: %+v", a, b, c, values[cemi.NewGroupAddr3(a,b,c)])
+		fmt.Fprintf(w, "Last message to %d/%d/%d: %+v", a, b, c, values[cemi.NewGroupAddr3(a, b, c)])
 		mutex.Unlock()
 	}
 }
 
-func web_set(w http.ResponseWriter, r *http.Request) {
+func webSet(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "SET: %s", r.URL)
 }
 
@@ -115,11 +116,11 @@ func main() {
 	knxrouter := flag.String("knx", "", "address of KNX router")
 	flag.Parse()
 
-	go get_knx_messages(*knxrouter)
+	go knxGetMessages(*knxrouter)
 
-	http.HandleFunc("/", web_root)
-	http.HandleFunc("/get/", web_get)
-	http.HandleFunc("/set/", web_set)
+	http.HandleFunc("/", webRoot)
+	http.HandleFunc("/get/", webGet)
+	http.HandleFunc("/set/", webSet)
 	log.Printf("Starting web server on port %d...", *webport)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", *webport), nil))
 }
