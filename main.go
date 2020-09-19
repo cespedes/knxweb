@@ -1,11 +1,11 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -13,16 +13,51 @@ import (
 
 	"github.com/vapourismo/knx-go/knx"
 	"github.com/vapourismo/knx-go/knx/cemi"
+	"github.com/vapourismo/knx-go/knx/dpt"
 )
 
 const (
 	KNXDefaultPort = 3671
-	KNXTimeout     = 5
+	KNXTimeout     = 10 // no messages in 10 seconds: probable error in connection
 )
 
 type knxMsg struct {
 	When  time.Time
 	Event knx.GroupEvent
+}
+
+type addrNameType struct {
+	Name string
+	Type dpt.DatapointValue
+}
+
+var devices = make(map[cemi.IndividualAddr]string)
+var addresses = make(map[cemi.GroupAddr]addrNameType)
+
+func (k knxMsg) String() string {
+	s := k.When.Format("2006-01-02 15:04:05")
+	switch k.Event.Command {
+	case knx.GroupRead:
+		s += " read:"
+	case knx.GroupResponse:
+		s += " response:"
+	case knx.GroupWrite:
+		s += " write:"
+	default:
+		s += " ???:"
+	}
+	s += " " + k.Event.Source.String() + " " + k.Event.Destination.String() + "=" + fmt.Sprint(k.Event.Data)
+	if str, ok := devices[k.Event.Source]; ok {
+		s += " " + str
+	}
+	if nt, ok := addresses[k.Event.Destination]; ok {
+		if err := addresses[k.Event.Destination].Type.Unpack(k.Event.Data); err != nil {
+			fmt.Printf("Network: Error parsing %v for %v\n", k.Event.Data, k.Event.Destination)
+		} else {
+			s += " " + nt.Name + "=" + fmt.Sprint(nt.Type)
+		}
+	}
+	return s
 }
 
 var mutex sync.Mutex
@@ -42,9 +77,10 @@ func knxNewMessage(event knx.GroupEvent) {
 	}
 	values[event.Destination] = msg
 	mutex.Unlock()
-	log.Printf("KNX: %+v", event)
-	b, _ := json.Marshal(event)
-	log.Printf("JSON: %v", string(b))
+	fmt.Println(msg)
+	// log.Printf("KNX: %+v", event)
+	// b, _ := json.Marshal(event)
+	// log.Printf("JSON: %v", string(b))
 }
 
 func knxGetMessages(knxrouter string) {
@@ -112,6 +148,12 @@ func webSet(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	if err := ReadConfig("knx.cfg"); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	fmt.Printf("devices: %v\n", devices)
+	fmt.Printf("addresses: %v\n", addresses)
 	webport := flag.Int("port", 8001, "port to listen for incoming connections")
 	knxrouter := flag.String("knx", "", "address of KNX router")
 	flag.Parse()
