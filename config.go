@@ -19,6 +19,27 @@ address 2/5/7 1.009 myroom.door
 	...
 */
 
+type UnknownDPT []byte
+
+func (d UnknownDPT) Pack() []byte {
+	return []byte(d)
+}
+
+func (d *UnknownDPT) Unpack(data []byte) error {
+	tmp := make([]byte, len(data))
+	copy(tmp, data)
+	*d = UnknownDPT(tmp)
+	return nil
+}
+
+func (d UnknownDPT) String() string {
+	return fmt.Sprintf("%v", []byte(d))
+}
+
+func (d UnknownDPT) Unit() string {
+	return ""
+}
+
 func ReadConfig(filename string) error {
 	f, err := os.Open(filename)
 	if err != nil {
@@ -60,7 +81,8 @@ func ReadConfig(filename string) error {
 			}
 			dp, ok := dpt.Produce(tokens[2])
 			if !ok {
-				return fmt.Errorf("%s line %d: unknown type %v", filename, lineNum, tokens[1])
+				fmt.Printf("Warning: %s line %d: unknown type %v\n", filename, lineNum, tokens[2])
+				dp = new(UnknownDPT)
 			}
 			addresses[addr] = addrNameType{Name: tokens[3], Type: dp}
 		default:

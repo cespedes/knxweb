@@ -67,6 +67,7 @@ var sortedValues []cemi.GroupAddr
 
 func knxNewMessage(event knx.GroupEvent) {
 	msg := knxMsg{When: time.Now(), Event: event}
+	Log(msg)
 	mutex.Lock()
 	messages = append(messages, msg)
 	if _, ok := values[event.Destination]; !ok {
@@ -148,15 +149,21 @@ func webSet(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	webport := flag.Int("port", 8001, "port to listen for incoming connections")
+	knxrouter := flag.String("knx", "", "address of KNX router")
+	logdir := flag.String("logdir", "", "directory where logs are stored")
+	flag.Parse()
+	if *logdir != "" {
+		logDir = *logdir
+		fmt.Printf("logdir = %s\n", logDir)
+	}
+
 	if err := ReadConfig("knx.cfg"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	fmt.Printf("devices: %v\n", devices)
 	fmt.Printf("addresses: %v\n", addresses)
-	webport := flag.Int("port", 8001, "port to listen for incoming connections")
-	knxrouter := flag.String("knx", "", "address of KNX router")
-	flag.Parse()
 
 	go knxGetMessages(*knxrouter)
 

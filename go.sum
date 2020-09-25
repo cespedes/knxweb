@@ -22,6 +22,8 @@ github.com/rivo/uniseg v0.1.0/go.mod h1:J6wj4VEh+S6ZtnVlnTBMWIodfgj8LQOQFoIToxlJ
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/testify v1.4.0 h1:2E4SXV/wtOkTonXsotYi4li6zVWxYlZuYNCXe9XRJyk=
 github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81PSLYec5m4=
+github.com/vapourismo/ets-go v0.0.0-20170625153540-52f53ccc1f85 h1:nSx9nsn5lsboES/6WPOjRmj5lxw43qEkFbpJZoPOaJw=
+github.com/vapourismo/ets-go v0.0.0-20170625153540-52f53ccc1f85/go.mod h1:ILkEkC596N5MJ6X+qXtIsPA/gFGrqmHb3EDsYWdCYmQ=
 github.com/vapourismo/knx-go v0.0.0-20190917200938-c1313fa7e9ca h1:w8z3ZMypVOPRjAEOVhMStngaGTdvz0gIbpggsuCZ4GE=
 github.com/vapourismo/knx-go v0.0.0-20190917200938-c1313fa7e9ca/go.mod h1:7+aWBsUJCo9OQRCgTypRmIQW9KKKcPMjtrdnYIBsS70=
 github.com/vapourismo/knx-go v0.0.0-20200809115751-961527466b6f h1:FEgYIqx9UV/PBeBX/TDsrJtdcEWRprF56ZEZqT4jpTg=
