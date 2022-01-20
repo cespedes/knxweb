@@ -18,7 +18,7 @@ import (
 
 const (
 	KNXDefaultPort = 3671
-	KNXTimeout     = 10 // no messages in 10 seconds: probable error in connection
+	KNXTimeout     = 30 // no messages in 10 seconds: probable error in connection
 )
 
 type knxMsg struct {
@@ -90,7 +90,7 @@ func knxGetMessages(knxrouter string) {
 	}
 
 	for {
-		log.Println("Stablishing connection to KNX router")
+		log.Printf("Stablishing connection to KNX router %s...\n", knxrouter)
 
 		client, err := knx.NewGroupTunnel(knxrouter, knx.DefaultTunnelConfig)
 		if err != nil {
@@ -158,6 +158,9 @@ func main() {
 		fmt.Printf("logdir = %s\n", logDir)
 	}
 
+	if *knxrouter == "" {
+		log.Fatal("No KNX router specified.  Please use option -knx")
+	}
 	if err := ReadConfig("knx.cfg"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
