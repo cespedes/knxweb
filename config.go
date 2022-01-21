@@ -64,7 +64,7 @@ func ReadConfig(filename string) error {
 			if len(tokens) != 3 {
 				return fmt.Errorf("%s line %d: %s\n", filename, lineNum, line)
 			}
-			fmt.Printf("line %d: new device: %v\n", lineNum, tokens)
+			// fmt.Printf("line %d: new device: %v\n", lineNum, tokens)
 			addr, err := cemi.NewIndividualAddrString(tokens[1])
 			if err != nil {
 				return fmt.Errorf("%s line %d: %w", filename, lineNum, err)
@@ -74,7 +74,7 @@ func ReadConfig(filename string) error {
 			if len(tokens) != 4 {
 				return fmt.Errorf("Syntax error in line %d: %s\n", lineNum, line)
 			}
-			fmt.Printf("line %d: new address: %v\n", lineNum, tokens)
+			// fmt.Printf("line %d: new address: %v\n", lineNum, tokens)
 			addr, err := cemi.NewGroupAddrString(tokens[1])
 			if err != nil {
 				return fmt.Errorf("%s line %d: %w", filename, lineNum, err)

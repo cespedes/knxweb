@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -18,7 +19,7 @@ import (
 
 const (
 	KNXDefaultPort = 3671
-	KNXTimeout     = 30 // no messages in 10 seconds: probable error in connection
+	KNXTimeout     = 60 // no messages in several seconds: probable error in connection
 )
 
 type knxMsg struct {
@@ -51,10 +52,11 @@ func (k knxMsg) String() string {
 		s += " " + str
 	}
 	if nt, ok := addresses[k.Event.Destination]; ok {
-		if err := addresses[k.Event.Destination].Type.Unpack(k.Event.Data); err != nil {
+		t := nt.Type
+		if err := t.Unpack(k.Event.Data); err != nil {
 			fmt.Printf("Network: Error parsing %v for %v\n", k.Event.Data, k.Event.Destination)
 		} else {
-			s += " " + nt.Name + "=" + fmt.Sprint(nt.Type)
+			s += " " + nt.Name + "=" + fmt.Sprint(t)
 		}
 	}
 	return s
@@ -94,7 +96,7 @@ func knxGetMessages(knxrouter string) {
 
 		client, err := knx.NewGroupTunnel(knxrouter, knx.DefaultTunnelConfig)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatalf("knx.NewGroupTunnel: %s", err.Error())
 		}
 		defer client.Close()
 
@@ -123,23 +125,92 @@ func webRoot(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "ROOT: %s\n", r.URL)
 }
 
+func getAddrs(s string) []cemi.GroupAddr {
+	var a, b, c uint8
+	var result []cemi.GroupAddr
+	i, _ := fmt.Sscanf(s, "%d/%d/%d", &a, &b, &c)
+	if i == 3 {
+		return append(result, cemi.NewGroupAddr3(a, b, c))
+	}
+	for key, val := range addresses {
+		if s == val.Name {
+			return append(result, key)
+		}
+		if strings.HasPrefix(val.Name, s+"/") {
+			result = append(result, key)
+		}
+	}
+	return result
+}
+
 func webGet(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path[5:]
-	var a, b, c uint8
 	if path == "latest" {
 		mutex.Lock()
+		if len(messages) == 0 {
+			mutex.Unlock()
+			return
+		}
 		msg := messages[len(messages)-1]
 		mutex.Unlock()
-		fmt.Fprintf(w, "Last message: %+v", msg)
+		fmt.Fprintf(w, "%+v\n", msg)
 	} else if path == "all" {
 		mutex.Lock()
 		for i := range sortedValues {
 			fmt.Fprintf(w, "%+v\n", values[sortedValues[i]])
 		}
 		mutex.Unlock()
-	} else if i, _ := fmt.Sscanf(path, "%d/%d/%d", &a, &b, &c); i == 3 {
+	} else if strings.HasPrefix(path, "all/") {
+		addrs := getAddrs(path[4:])
+		if len(addrs) == 0 {
+			http.Error(w, "404 Not Found", http.StatusBadRequest)
+			return
+		}
 		mutex.Lock()
-		fmt.Fprintf(w, "Last message to %d/%d/%d: %+v", a, b, c, values[cemi.NewGroupAddr3(a, b, c)])
+		for _, m := range messages {
+			for _, a := range addrs {
+				if m.Event.Destination == a {
+					fmt.Fprintf(w, "%+v\n", m)
+				}
+			}
+		}
+		mutex.Unlock()
+	} else if strings.HasPrefix(path, "raw/") {
+		addrs := getAddrs(path[4:])
+		if len(addrs) == 0 {
+			http.Error(w, "404 Not Found", http.StatusBadRequest)
+			return
+		}
+
+		mutex.Lock()
+		for _, addr := range addrs {
+			if msg, ok := values[addr]; ok {
+				if nt, ok := addresses[addr]; ok {
+					t := nt.Type
+					if err := t.Unpack(msg.Event.Data); err != nil {
+						fmt.Fprintf(w, "Error parsing %v for %v\n", msg.Event.Data, msg.Event.Destination)
+					} else {
+						b, _ := json.Marshal(t)
+						fmt.Fprintf(w, "%s\n", string(b))
+					}
+				} else {
+					fmt.Fprintf(w, "%v\n", msg.Event.Data)
+				}
+			}
+		}
+		mutex.Unlock()
+	} else {
+		addrs := getAddrs(path)
+		if len(addrs) == 0 {
+			http.Error(w, "404 Not Found", http.StatusBadRequest)
+			return
+		}
+		mutex.Lock()
+		for _, addr := range addrs {
+			if msg, ok := values[addr]; ok {
+				fmt.Fprintf(w, "%+v\n", msg)
+			}
+		}
 		mutex.Unlock()
 	}
 }
@@ -149,6 +220,7 @@ func webSet(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	debug := flag.Bool("debug", false, "debugging info")
 	webport := flag.Int("port", 8001, "port to listen for incoming connections")
 	knxrouter := flag.String("knx", "", "address of KNX router")
 	logdir := flag.String("logdir", "", "directory where logs are stored")
@@ -165,8 +237,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	fmt.Printf("devices: %v\n", devices)
-	fmt.Printf("addresses: %v\n", addresses)
+	if *debug {
+		fmt.Printf("devices: %v\n", devices)
+		fmt.Printf("addresses: %v\n", addresses)
+	}
 
 	go knxGetMessages(*knxrouter)
 

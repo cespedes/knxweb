@@ -27,7 +27,7 @@ func createLogFile() {
 	logSize = 0
 }
 
-func Log(k knxMsg) {
+func LogBinary(k knxMsg) {
 	var buf [1024]byte
 	if logFile == nil {
 		createLogFile()
@@ -52,4 +52,11 @@ func Log(k knxMsg) {
 		}
 		logFile = nil
 	}
+}
+
+func LogText(k knxMsg) {
+}
+
+func Log(k knxMsg) {
+	LogBinary(k)
 }
