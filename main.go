@@ -13,11 +13,12 @@ import (
 
 	"github.com/vapourismo/knx-go/knx"
 	"github.com/vapourismo/knx-go/knx/cemi"
+	"github.com/vapourismo/knx-go/knx/dpt"
 )
 
 const (
 	KNXDefaultPort = 3671
-	KNXTimeout     = 60 // no messages in several seconds: probable error in connection
+	KNXTimeout     = 120 // no messages in several seconds: probable error in connection
 )
 
 var config *Config
@@ -29,6 +30,17 @@ type Server struct {
 	Messages     []knxMsg
 	Values       map[cemi.GroupAddr]knxMsg
 	SortedValues []cemi.GroupAddr
+
+	Conns map[string]knx.GroupTunnel
+
+	logFile     *os.File
+	logFileName string
+}
+
+type knxMsg struct {
+	When  time.Time
+	Where string // Gateway where this message came from
+	Event knx.GroupEvent
 }
 
 func (k knxMsg) String() string {
@@ -48,24 +60,23 @@ func (k knxMsg) String() string {
 		str += " " + dev
 	}
 	if nt, ok := config.Addresses[k.Event.Destination]; ok {
-		t := nt.Type
-		if err := t.Unpack(k.Event.Data); err != nil {
+		dp, ok := dpt.Produce(nt.DPT)
+		if !ok {
+			fmt.Printf("Warning: unknown type %v in config file\n", nt.DPT)
+			dp = new(UnknownDPT)
+		}
+		if err := dp.Unpack(k.Event.Data); err != nil {
 			fmt.Printf("Network: Error parsing %v for %v\n", k.Event.Data, k.Event.Destination)
 		} else {
-			str += " " + nt.Name + "=" + fmt.Sprint(t)
+			str += " " + nt.Name + "=" + fmt.Sprint(dp)
 		}
 	}
 	return str
 }
 
-type knxMsg struct {
-	When  time.Time
-	Event knx.GroupEvent
-}
-
-func (s *Server) knxNewMessage(event knx.GroupEvent) {
-	msg := knxMsg{When: time.Now(), Event: event}
-	Log(msg)
+func (s *Server) knxNewMessage(gateway string, event knx.GroupEvent) {
+	msg := knxMsg{When: time.Now(), Where: gateway, Event: event}
+	s.Log(msg)
 	s.Mutex.Lock()
 	s.Messages = append(s.Messages, msg)
 	if _, ok := s.Values[event.Destination]; !ok {
@@ -94,6 +105,7 @@ func (s *Server) knxGetMessages() {
 		fmt.Printf("gateways: %v\n", config.Gateways)
 	}
 
+	s.Conns = make(map[string]knx.GroupTunnel)
 	for _, gw := range config.Gateways {
 		go func(gw string) {
 			for {
@@ -107,6 +119,9 @@ func (s *Server) knxGetMessages() {
 					continue
 				}
 				defer client.Close()
+				s.Mutex.Lock()
+				s.Conns[gw] = client
+				s.Mutex.Unlock()
 
 				knxChan := client.Inbound()
 
@@ -121,10 +136,13 @@ func (s *Server) knxGetMessages() {
 							log.Printf("Error reading from KNX channel")
 							break innerLoop
 						}
-						s.knxNewMessage(event)
+						s.knxNewMessage(gw, event)
 					}
 				}
+				s.Mutex.Lock()
 				client.Close()
+				delete(s.Conns, gw)
+				s.Mutex.Unlock()
 				time.Sleep(time.Second)
 			}
 		}(gw)
@@ -163,6 +181,7 @@ func main() {
 
 	func() {
 		// TODO: specify file location in config file
+		// TODO: compress?
 		file, err := os.Open("status.json")
 		if err != nil {
 			log.Println(err)
@@ -186,15 +205,21 @@ func main() {
 	go func() {
 		for {
 			time.Sleep(30 * time.Second)
+			if s.Debug {
+				log.Println("Writing status to disk")
+			}
 			// TODO: create file atomically (race!)
 			// TODO: specify file location in config file
+			// TODO: compress?
 			file, err := os.Create("status.json")
 			if err != nil {
 				log.Println(err)
 				return
 			}
 			encoder := json.NewEncoder(file)
+			s.Mutex.Lock()
 			err = encoder.Encode(s.Values)
+			s.Mutex.Unlock()
 			file.Close()
 		}
 	}()
