@@ -199,8 +199,6 @@ func (s *Server) WebServer() {
 	http.HandleFunc("/", s.webRoot)
 	http.HandleFunc("/get/", s.webGet)
 	http.HandleFunc("/set/", s.webSet)
-	// TODO: specify webport in config file
-	webport := 8001
-	log.Printf("Starting web server on port %d...", webport)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", webport), nil))
+	log.Printf("Starting web server on port %d...", config.Port)
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", config.Port), nil))
 }

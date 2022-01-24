@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/vapourismo/knx-go/knx/cemi"
@@ -11,13 +12,13 @@ import (
 
 /* Syntax of KNXweb config file:
 
-gateway 192.168.1.11
+logdir /var/log/knx
+port 8001
+gateway 192.168.1.11 1/ 2/5/
 	...
-
-device 1.1.10 myroom.i/o
+device 1.1.10 myroom.thermostat
 	...
-
-address 2/5/7 1.009 myroom.door
+address 2/5/7 9.001 myroom/temperature
 	...
 */
 type addrNameType struct {
@@ -31,10 +32,11 @@ type Gateway struct {
 }
 
 type Config struct {
-	Logdir    string
-	Gateways  []Gateway
-	Devices   map[cemi.IndividualAddr]string
-	Addresses map[cemi.GroupAddr]addrNameType
+	Logdir    string                          // Where to store packet logs
+	Port      int                             // TCP port to listen HTTP requests
+	Gateways  []Gateway                       // List of KNX-IP gateways to connect to
+	Devices   map[cemi.IndividualAddr]string  // List of KNX devices
+	Addresses map[cemi.GroupAddr]addrNameType // List of KNX group addresses
 }
 
 type UnknownDPT []byte
@@ -86,6 +88,14 @@ func ReadConfig(filename string) (*Config, error) {
 				return nil, fmt.Errorf("syntax error in %s line %d", filename, lineNum)
 			}
 			c.Logdir = tokens[1]
+		case "port":
+			if len(tokens) != 2 {
+				return nil, fmt.Errorf("syntax error in %s line %d", filename, lineNum)
+			}
+			c.Port, err = strconv.Atoi(tokens[1])
+			if err != nil {
+				return nil, fmt.Errorf("%s line %d: %w", filename, lineNum, err)
+			}
 		case "gateway":
 			if len(tokens) < 2 {
 				return nil, fmt.Errorf("syntax error in %s line %d", filename, lineNum)
