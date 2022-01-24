@@ -130,12 +130,30 @@ func (s *Server) webSet(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Where to write to this group address?  Let's see if we have seen it before...
+	var where string
 	s.Mutex.Lock()
 	msg, ok := s.Values[groupAddr]
 	s.Mutex.Unlock()
-	if !ok || msg.Where == "" {
-		http.Error(w, "406 Not Acceptable", http.StatusNotAcceptable)
-		return
+	if ok && msg.Where != "" {
+		where = msg.Where
+	} else {
+		groupName := groupAddr.String()
+		for _, gw := range config.Gateways {
+			for _, g := range gw.Groups {
+				if strings.HasPrefix(groupName, g) {
+					where = gw.Address
+					break
+				}
+			}
+			if where != "" {
+				break
+			}
+		}
+		if where == "" {
+			http.Error(w, "406 Not Acceptable", http.StatusNotAcceptable)
+			return
+		}
 	}
 	dp, ok := dpt.Produce(DPT)
 	if !ok {
@@ -149,7 +167,7 @@ func (s *Server) webSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.Mutex.Lock()
-	client, ok := s.Conns[msg.Where]
+	client, ok := s.Conns[where]
 	s.Mutex.Unlock()
 	if !ok {
 		http.Error(w, "500 Internal Server Error", http.StatusInternalServerError)
@@ -157,7 +175,7 @@ func (s *Server) webSet(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.Debug {
 		log.Printf("client = %v", client)
-		log.Printf("Writing to %s: %v=%v", msg.Where, groupAddr, dp)
+		log.Printf("Writing to %s: %v=%v", where, groupAddr, dp)
 	}
 	event := knx.GroupEvent{
 		Command:     knx.GroupWrite,
@@ -169,10 +187,8 @@ func (s *Server) webSet(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "503 Service Unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	s.knxNewMessage(msg.Where, event)
+	s.knxNewMessage(where, event)
 
-	// TODO: will write msg.Where:groupAddr=dp
-	// SetDPTFromString(d dpt.DatapointValue, value string) error {
 	fmt.Fprintf(w, "SET: %v=%v\n", groupAddr, dp)
 }
 

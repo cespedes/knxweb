@@ -25,9 +25,14 @@ type addrNameType struct {
 	DPT  string
 }
 
+type Gateway struct {
+	Address string
+	Groups  []string
+}
+
 type Config struct {
 	Logdir    string
-	Gateways  []string
+	Gateways  []Gateway
 	Devices   map[cemi.IndividualAddr]string
 	Addresses map[cemi.GroupAddr]addrNameType
 }
@@ -82,10 +87,14 @@ func ReadConfig(filename string) (*Config, error) {
 			}
 			c.Logdir = tokens[1]
 		case "gateway":
-			if len(tokens) != 2 {
+			if len(tokens) < 2 {
 				return nil, fmt.Errorf("syntax error in %s line %d", filename, lineNum)
 			}
-			c.Gateways = append(c.Gateways, tokens[1])
+			gw := Gateway{Address: tokens[1]}
+			for _, g := range tokens[2:] {
+				gw.Groups = append(gw.Groups, g)
+			}
+			c.Gateways = append(c.Gateways, gw)
 		case "device":
 			if len(tokens) != 3 {
 				return nil, fmt.Errorf("syntax error in %s line %d", filename, lineNum)

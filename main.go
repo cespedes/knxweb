@@ -97,8 +97,8 @@ func (s *Server) knxNewMessage(gateway string, event knx.GroupEvent) {
 
 func (s *Server) knxGetMessages() {
 	for i, gw := range config.Gateways {
-		if !strings.Contains(gw, ":") {
-			config.Gateways[i] = fmt.Sprintf("%s:%d", gw, KNXDefaultPort)
+		if !strings.Contains(gw.Address, ":") {
+			config.Gateways[i].Address = fmt.Sprintf("%s:%d", gw.Address, KNXDefaultPort)
 		}
 	}
 	if s.Debug {
@@ -107,20 +107,20 @@ func (s *Server) knxGetMessages() {
 
 	s.Conns = make(map[string]knx.GroupTunnel)
 	for _, gw := range config.Gateways {
-		go func(gw string) {
+		go func(gwName string) {
 			for {
-				log.Printf("Stablishing connection to KNX gateway %s...\n", gw)
+				log.Printf("Stablishing connection to KNX gateway %s...\n", gwName)
 
-				client, err := knx.NewGroupTunnel(gw, knx.DefaultTunnelConfig)
+				client, err := knx.NewGroupTunnel(gwName, knx.DefaultTunnelConfig)
 				if err != nil {
-					log.Printf("knx.NewGroupTunnel (%s): %s", gw, err.Error())
+					log.Printf("knx.NewGroupTunnel (%s): %s", gwName, err.Error())
 					log.Printf("Sleeping %d seconds...", KNXTimeout)
 					time.Sleep(KNXTimeout * time.Second)
 					continue
 				}
 				defer client.Close()
 				s.Mutex.Lock()
-				s.Conns[gw] = client
+				s.Conns[gwName] = client
 				s.Mutex.Unlock()
 
 				knxChan := client.Inbound()
@@ -136,16 +136,16 @@ func (s *Server) knxGetMessages() {
 							log.Printf("Error reading from KNX channel")
 							break innerLoop
 						}
-						s.knxNewMessage(gw, event)
+						s.knxNewMessage(gwName, event)
 					}
 				}
 				s.Mutex.Lock()
 				client.Close()
-				delete(s.Conns, gw)
+				delete(s.Conns, gwName)
 				s.Mutex.Unlock()
 				time.Sleep(time.Second)
 			}
-		}(gw)
+		}(gw.Address)
 	}
 }
 
