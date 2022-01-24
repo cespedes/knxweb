@@ -17,8 +17,10 @@ import (
 )
 
 const (
-	KNXDefaultPort = 3671
-	KNXTimeout     = 120 // no messages in several seconds: probable error in connection
+	KNXDefaultPort    = 3671
+	KNXTimeout        = 3 * time.Minute // no messages in some time: probable error in connection
+	MessagesSizeMax   = 256 * 1024      // Maximum number of messages to store
+	MessagesSizeTrunc = 248 * 1024      // When maximum reached, shrink to this
 )
 
 var config *Config
@@ -79,6 +81,14 @@ func (s *Server) knxNewMessage(gateway string, event knx.GroupEvent) {
 	s.Log(msg)
 	s.Mutex.Lock()
 	s.Messages = append(s.Messages, msg)
+	if l := len(s.Messages); l%10 == 0 {
+		log.Printf("Messages size: %d", l)
+	}
+	if l := len(s.Messages); l > MessagesSizeMax {
+		s.Messages = s.Messages[l-MessagesSizeTrunc:]
+		log.Printf("Messages grew to %d entries; shrinking to %d", l, MessagesSizeTrunc)
+	}
+	log.Printf("New destination group addr: %v", event.Destination)
 	if _, ok := s.Values[event.Destination]; !ok {
 		// this destination has not been seen yet
 		if s.Debug {
@@ -114,8 +124,8 @@ func (s *Server) knxGetMessages() {
 				client, err := knx.NewGroupTunnel(gwName, knx.DefaultTunnelConfig)
 				if err != nil {
 					log.Printf("knx.NewGroupTunnel (%s): %s", gwName, err.Error())
-					log.Printf("Sleeping %d seconds...", KNXTimeout)
-					time.Sleep(KNXTimeout * time.Second)
+					log.Printf("Sleeping %s...", KNXTimeout/4)
+					time.Sleep(KNXTimeout / 4)
 					continue
 				}
 				defer client.Close()
@@ -128,8 +138,8 @@ func (s *Server) knxGetMessages() {
 			innerLoop:
 				for {
 					select {
-					case <-time.After(KNXTimeout * time.Second):
-						log.Printf("timeout (%d seconds)", KNXTimeout)
+					case <-time.After(KNXTimeout):
+						log.Printf("timeout (%s)", KNXTimeout)
 						break innerLoop
 					case event, ok := <-knxChan:
 						if !ok {
